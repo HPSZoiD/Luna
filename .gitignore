@@ -1,0 +1,16 @@
+# IDEs
+.vscode/
+.idea/
+
+# Backend/Tools
+.gemini/
+__pycache__/
+*.pyc
+
+# OS Files
+Thumbs.db
+.DS_Store
+
+# Temporary files
+tmp/
+temp/
