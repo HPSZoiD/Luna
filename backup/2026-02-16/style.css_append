@@ -1,0 +1,83 @@
+/* ======================== NEW VISUALS ======================== */
+
+/* ── AURA VISUAL (Emotional Intelligence) ── */
+.aura-bg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 60vw;
+    height: 60vw;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle, rgba(155, 140, 255, 0.15) 0%, rgba(80, 50, 200, 0.05) 40%, transparent 70%);
+    filter: blur(80px);
+    z-index: -1;
+    pointer-events: none;
+    animation: auraPulse 10s ease-in-out infinite alternate;
+}
+
+@keyframes auraPulse {
+    0% { transform: translate(-50%, -50%) scale(0.9); opacity: 0.5; }
+    100% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.8; }
+}
+
+/* ── MEMORY NETWORK (Memory) ── */
+.memory-bg {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    opacity: 0.2;
+    background-image: 
+        radial-gradient(1px 1px at 20px 30px, var(--accent) 50%, transparent 0),
+        radial-gradient(1px 1px at 40px 70px, #fff 50%, transparent 0),
+        radial-gradient(1px 1px at 50px 160px, var(--accent) 50%, transparent 0),
+        radial-gradient(1px 1px at 90px 40px, #fff 50%, transparent 0),
+        radial-gradient(1px 1px at 130px 80px, #fff 50%, transparent 0);
+    background-size: 200px 200px;
+    animation: twinkle 4s ease-in-out infinite;
+    pointer-events: none;
+}
+
+@keyframes twinkle {
+    0%, 100% { opacity: 0.2; }
+    50% { opacity: 0.35; }
+}
+
+/* ── PRIVACY SHIELD (Privacy) ── */
+.privacy-bg {
+    position: absolute;
+    top: 50%;
+    left: 10%;
+    width: 300px;
+    height: 300px;
+    transform: translateY(-50%);
+    background: radial-gradient(circle, rgba(155, 140, 255, 0.08) 0%, transparent 70%);
+    z-index: -1;
+    pointer-events: none;
+    border-radius: 50%;
+}
+
+.privacy-bg::before {
+    content: '';
+    position: absolute;
+    inset: 20%;
+    border: 1px solid rgba(155, 140, 255, 0.1);
+    border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
+    animation: shieldMorph 8s linear infinite;
+}
+
+@keyframes shieldMorph {
+    0% { border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%; transform: rotate(0deg); }
+    50% { border-radius: 70% 30% 30% 70% / 70% 70% 30% 30%; }
+    100% { border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%; transform: rotate(360deg); }
+}
+
+/* ======================== PERFORMANCE ======================== */
+/* Optimize heavy filters */
+.glass-card {
+    will-change: transform, opacity;
+}
+
+.section {
+    content-visibility: auto;
+    contain-intrinsic-size: 800px;
+}

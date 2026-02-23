@@ -1,0 +1,81 @@
+# HPS Labs: Landing Page Entry Spec
+
+This guide defines the **standard entry animation pattern** for all HPS Labs project landing pages. Following this spec ensures a seamless "curtain wipe" transition from the portfolio to any individual project page.
+
+## 1. Structure (HTML)
+
+Place this immediately after the `<body>` tag. It consists of the black background curtain and the project title.
+
+```html
+<!-- Entry Animation Curtain -->
+<div id="project-entry-curtain">
+  <div class="entry-content">
+    <h1 class="entry-title">PROJECT NAME</h1>
+  </div>
+</div>
+```
+
+## 2. Styles (CSS)
+
+The curtain must cover the entire viewport and sit above everything else.
+
+```css
+#project-entry-curtain {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: #060606; /* Match portfolio background */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.entry-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(32px, 5vw, 64px);
+  font-weight: 300;
+  color: #f0ede8;
+  letter-spacing: 0.1em;
+  opacity: 0;
+}
+```
+
+## 3. Animation Logic (GSAP)
+
+This logic mirrors the exit transition of the portfolio. The curtain starts at `y: 0` (covering the screen) and "sweeps out" upward.
+
+```javascript
+// Ensure GSAP is loaded
+window.addEventListener('load', () => {
+  const tl = gsap.timeline();
+
+  tl.to('.entry-title', {
+    opacity: 1,
+    duration: 0.8,
+    ease: 'power2.out'
+  })
+  .to('.entry-title', {
+    opacity: 0,
+    duration: 0.5,
+    ease: 'power2.in',
+    delay: 0.3
+  })
+  .to('#project-entry-curtain', {
+    y: '-100%',
+    duration: 0.7,
+    ease: 'power4.inOut'
+  });
+});
+```
+
+## 4. Technical Constants
+
+To maintain the "HPS Feel," do not deviate from these values:
+
+| Parameter | Value | Note |
+| :--- | :--- | :--- |
+| **Curtain Ease** | `power4.inOut` | Critical for the "cinematic" feel |
+| **Curtain Duration**| `0.7s` | Matches the portfolio sweep speed |
+| **Curtain Color** | `#060606` | HPS Signature Black |
+| **Z-Index** | `99999` | Must be the highest element |

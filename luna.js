@@ -9,27 +9,81 @@
     const FRAME_DIR = 'luna-frames/';
     const FRAME_PREFIX = 'ezgif-frame-';
     const FRAME_EXT = '.jpg';
-    const TOTAL_FRAMES = 192;
+    const TOTAL_FRAMES = 60; // Optimized from 192 - every 3rd frame for smooth playback
     const PLAY_END = 0.75;
     const EASE_FACTOR = 0.12;
     const PARTICLE_COUNT = 28;
 
-    /* ──────────── STATE ──────────── */
+    /* ============================================================
+       0. PAGE VISIBILITY & PERFORMANCE TRACKING
+    ============================================================ */
+    function initPerformanceObservers() {
+        // Track page visibility to pause animations when hidden
+        document.addEventListener('visibilitychange', () => {
+            isPageVisible = !document.hidden;
+        });
+
+        // Autoplay Unlock: Many browsers block muted autoplay until first interaction
+        const unlockVideos = () => {
+            const v2 = document.getElementById('lunaVideo2');
+            if (v2 && v2.paused) v2.play().catch(() => { });
+            window.removeEventListener('scroll', unlockVideos);
+            window.removeEventListener('click', unlockVideos);
+            window.removeEventListener('touchstart', unlockVideos);
+        };
+        window.addEventListener('scroll', unlockVideos, { once: true });
+        window.addEventListener('click', unlockVideos, { once: true });
+        window.addEventListener('touchstart', unlockVideos, { once: true });
+
+        // Intersection Observer for canvas visibility
+        if ('IntersectionObserver' in window) {
+            const canvasObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    const id = entry.target.id;
+                    // Only update if it's currently in the viewport
+                    if (id === 'lunaVideo' && window.introController) {
+                        window.introController.isVisible = entry.isIntersecting;
+                    }
+                    if (id === 'lunaVideo2') {
+                        const v = entry.target;
+                        if (entry.isIntersecting) {
+                            // Try playing, catch if blocked
+                            v.play().catch(() => {
+                                // If blocked, we'll try again on next interaction
+                                console.log('[Video] lunaVideo2 play blocked, waiting for interaction');
+                            });
+                        } else {
+                            v.pause();
+                        }
+                    }
+                });
+            }, { threshold: 0.1 });
+
+            const v1 = document.getElementById('lunaVideo');
+            const v2 = document.getElementById('lunaVideo2');
+            if (v1) canvasObserver.observe(v1);
+            if (v2) canvasObserver.observe(v2);
+        }
+    }
     let frames = [], frameCount = 0, isReady = false;
     let targetIdx = 0, currentIdx = 0, rafId = null;
     let mx = innerWidth / 2, my = innerHeight / 2;
     let glowX = mx, glowY = my;
     let particles = [];
 
+    /* ──────────── PERFORMANCE STATE ──────────── */
+    let isPageVisible = true;
+    let scrollRAF = null;
+    let lastScrollTime = 0;
+    const SCROLL_THROTTLE = 16; // ~60fps
+
     /* ──────────── DOM ──────────── */
     const $ = s => document.querySelector(s);
     const $$ = s => document.querySelectorAll(s);
 
     const canvas = $('#lunaCanvas');
-    const ctx = canvas.getContext('2d');
-    const loader = $('#loader');
-    const loaderFill = $('#loaderFill');
-    const loaderPct = $('#loaderPct');
+    const ctx = canvas ? canvas.getContext('2d') : null;
+    const entryCurtain = $('#project-entry-curtain');
     const lunaGlow = $('#lunaGlow');
     const scrollTrack = $('#scrollTrack');
     const heroTitle = $('.hero-title');
@@ -122,128 +176,197 @@
     }
 
     /* ============================================================
-       4. CANVAS SETUP
+       VideoController Class - Handles scroll-synced video scrubbing
     ============================================================ */
-    function resizeCanvas() {
-        canvas.width = innerWidth;
-        canvas.height = innerHeight;
-        if (isReady && frameCount > 0) drawFrame(Math.round(currentIdx));
-    }
+    class VideoController {
+        constructor(videoId, trackId) {
+            this.video = document.getElementById(videoId);
+            this.track = document.getElementById(trackId);
+            this.isReady = false;
+            this.isVisible = true;
+            this.targetTime = 0;
+            this.currentTime = 0;
 
-    /* ============================================================
-       5. FRAME PRELOADER (fixed relative paths)
-    ============================================================ */
-    function framePath(i) {
-        return FRAME_DIR + FRAME_PREFIX + String(i + 1).padStart(3, '0') + FRAME_EXT;
-    }
+            // Debug: Expose controller to window for inspection
+            if (videoId === 'lunaVideo') window.introController = this;
+            if (videoId === 'lunaVideo2') window.bridgeController = this;
 
-    function loadOne(i) {
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            img.onload = async () => {
-                try { await img.decode(); } catch (_) { }
-                resolve({ index: i, image: img });
-            };
-            img.onerror = () => reject(i);
-            img.src = framePath(i);
-        });
-    }
+            if (this.video) {
+                // Initialize video settings for scrubbing
+                this.video.muted = true;
+                this.video.playsInline = true;
+                this.video.preload = 'auto';
 
-    async function preloadFrames() {
-        frames = [];
-        let loaded = 0;
-        const BATCH = 16;
-        for (let s = 0; s < TOTAL_FRAMES; s += BATCH) {
-            const end = Math.min(s + BATCH, TOTAL_FRAMES);
-            const batch = [];
-            for (let i = s; i < end; i++) {
-                batch.push(
-                    loadOne(i)
-                        .then(r => { frames.push(r); loaded++; updateLoader(loaded); })
-                        .catch(() => { loaded++; updateLoader(loaded); })
-                );
+                const onMetadata = () => {
+                    this.isReady = true;
+                    // Force a play/pause cycle to unlock the engine
+                    const p = this.video.play();
+                    if (p !== undefined) {
+                        p.then(() => {
+                            this.video.pause();
+                        }).catch(() => { });
+                    }
+                };
+
+                this.video.addEventListener('loadedmetadata', onMetadata);
+                if (this.video.readyState >= 1) onMetadata();
             }
-            await Promise.all(batch);
         }
-        frames.sort((a, b) => a.index - b.index);
-        frameCount = frames.length;
-        console.log(`Luna: ${frameCount}/${TOTAL_FRAMES} frames ready`);
-    }
 
-    function updateLoader(n) {
-        const pct = Math.round((n / TOTAL_FRAMES) * 100);
-        if (loaderFill) loaderFill.style.width = pct + '%';
-        if (loaderPct) loaderPct.textContent = pct + '%';
-    }
+        onScroll(st) {
+            if (!this.track || !this.video || !this.video.duration) {
+                return 0;
+            }
+            const rect = this.track.getBoundingClientRect();
+            const trackTop = rect.top + window.scrollY;
+            const trackHeight = this.track.scrollHeight;
 
-    /* ============================================================
-       6. FRAME DRAWING
-    ============================================================ */
-    function drawFrame(idx) {
-        if (idx < 0 || idx >= frameCount) return;
-        const f = frames[idx];
-        if (!f || !f.image) return;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const ir = f.image.width / f.image.height;
-        const cr = canvas.width / canvas.height;
-        let dw, dh;
-        if (ir > cr) { dh = canvas.height; dw = dh * ir; }
-        else { dw = canvas.width; dh = dw / ir; }
-        const ox = (canvas.width - dw) / 2;
-        const oy = (canvas.height - dh) / 2;
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(f.image, ox, oy, dw, dh);
-    }
+            let p = (window.scrollY - trackTop) / (trackHeight - window.innerHeight);
+            p = Math.max(0, Math.min(1, p));
 
-    /* ============================================================
-       7. RAF RENDER LOOP
-    ============================================================ */
-    function tick() {
-        /* frame interpolation */
-        if (isReady && frameCount > 0) {
-            const diff = targetIdx - currentIdx;
-            currentIdx = Math.abs(diff) < 0.01 ? targetIdx : currentIdx + diff * EASE_FACTOR;
-            drawFrame(Math.round(currentIdx));
+            // Map progress to video duration
+            this.targetTime = p * this.video.duration;
+            return p;
         }
-        /* cursor */
-        updateCursor();
-        /* particles */
-        drawParticles();
 
-        rafId = requestAnimationFrame(tick);
+        update() {
+            if (!this.isReady || !this.video || !this.isVisible) return;
+
+            // Performance: only update if time has meaningfully changed
+            const diff = this.targetTime - this.currentTime;
+            if (Math.abs(diff) > 0.001) {
+                this.currentTime += diff * 0.25;
+                this.video.currentTime = this.currentTime;
+            }
+        }
     }
 
+    let introController, bridgeController;
+
     /* ============================================================
-       8. SCROLL → FRAME + PARALLAX
+       4. CANVAS SETUP (DEPRECATED: Using video elements now)
+    ============================================================ */
+
+    /* ============================================================
+       VideoScrubber (Legacy Canvas) - Kept for compatibility if needed
+    ============================================================ */
+    class VideoScrubber {
+        constructor(canvasId, trackId, dir, frameCount = 60) {
+            this.canvas = document.getElementById(canvasId);
+            if (!this.canvas) return;
+            this.ctx = this.canvas.getContext('2d', { alpha: true });
+            this.track = document.getElementById(trackId);
+            this.dir = dir;
+            this.totalFrames = frameCount;
+            this.frames = [];
+            this.isReady = false;
+            this.isVisible = true;
+            this.targetIdx = 0;
+            this.currentIdx = 0;
+            this.PLAY_END = 0.75;
+            this.lastDrawnFrame = -1;
+            window.addEventListener('resize', () => this.resize());
+            this.resize();
+        }
+        resize() {
+            this.canvas.width = window.innerWidth;
+            this.canvas.height = window.innerHeight;
+            if (this.isReady) this.drawFrame(Math.round(this.currentIdx));
+        }
+        async preload(onProgress) {
+            const BATCH = 8;
+            let loaded = 0;
+            for (let s = 0; s < this.totalFrames; s += BATCH) {
+                const end = Math.min(s + BATCH, this.totalFrames);
+                const batch = [];
+                for (let i = s; i < end; i++) {
+                    batch.push(this.loadOne(i).then(r => { this.frames.push(r); loaded++; if (onProgress) onProgress(loaded, this.totalFrames); }));
+                }
+                await Promise.all(batch);
+                await new Promise(r => setTimeout(r, 0));
+            }
+            this.frames.sort((a, b) => a.index - b.index);
+            this.isReady = true;
+        }
+        loadOne(i) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve({ index: i, image: img });
+                img.onerror = () => reject(i);
+                img.src = `${this.dir}ezgif-frame-${String(i + 1).padStart(3, '0')}.jpg`;
+            });
+        }
+        drawFrame(idx) {
+            if (idx === this.lastDrawnFrame || idx < 0 || idx >= this.frames.length) return;
+            this.lastDrawnFrame = idx;
+            const f = this.frames[idx];
+            if (!f || !f.image) return;
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            const ir = f.image.width / f.image.height;
+            const cr = this.canvas.width / this.canvas.height;
+            let dw, dh;
+            if (ir > cr) { dh = this.canvas.height; dw = dh * ir; }
+            else { dw = this.canvas.width; dh = dw / ir; }
+            const ox = (this.canvas.width - dw) / 2;
+            const oy = (this.canvas.height - dh) / 2;
+            this.ctx.drawImage(f.image, ox, oy, dw, dh);
+        }
+        update() {
+            if (!this.isVisible || !this.isReady) return;
+            const diff = this.targetIdx - this.currentIdx;
+            this.currentIdx = Math.abs(diff) < 0.01 ? this.targetIdx : this.currentIdx + diff * EASE_FACTOR;
+            this.drawFrame(Math.round(this.currentIdx));
+        }
+        onScroll(st) {
+            if (!this.track) return;
+            const rect = this.track.getBoundingClientRect();
+            const trackTop = rect.top + window.scrollY;
+            const trackHeight = this.track.scrollHeight;
+            let p = (window.scrollY - trackTop) / (trackHeight - window.innerHeight);
+            p = Math.max(0, Math.min(1, p));
+            this.targetIdx = p >= this.PLAY_END ? this.frames.length - 1 : Math.min(Math.floor((p / this.PLAY_END) * this.frames.length), this.frames.length - 1);
+            return p;
+        }
+    }
+
+    let introScrubber, bridgeScrubber;
+
+    /* ============================================================
+       8. SCROLL → FRAME + PARALLAX (Optimized with throttling)
     ============================================================ */
     function handleScroll() {
+        // Throttle scroll handler to ~60fps
+        const now = performance.now();
+        if (now - lastScrollTime < SCROLL_THROTTLE) return;
+        lastScrollTime = now;
+
         const st = window.scrollY;
-        const max = scrollTrack.scrollHeight - innerHeight;
-        const p = Math.min(st / max, 1);
 
-        targetIdx = p >= PLAY_END
-            ? frameCount - 1
-            : Math.min(Math.floor((p / PLAY_END) * frameCount), frameCount - 1);
+        // Intro controller
+        if (introController) {
+            const p = introController.onScroll(st);
 
-        /* Luna glow */
-        if (lunaGlow) lunaGlow.style.opacity = (0.1 + p * 0.25).toFixed(3);
-
-        /* Moon ring depth scale */
-        const moonRing = document.querySelector('.moon-ring');
-        if (moonRing) {
-            const ringScale = 1 + p * 0.15;
-            const ringOp = Math.max(0.3 - p * 0.6, 0);
-            moonRing.style.transform = `translate(-50%, -50%) rotate(${p * 120}deg) scale(${ringScale})`;
-            moonRing.style.opacity = ringOp;
+            /* Intro specific visuals */
+            if (lunaGlow) lunaGlow.style.opacity = (0.1 + p * 0.25).toFixed(3);
+            const moonRing = document.querySelector('.moon-ring');
+            if (moonRing) {
+                const ringScale = 1 + p * 0.15;
+                const ringOp = Math.max(0.3 - p * 0.6, 0);
+                moonRing.style.transform = `translate(-50%, -50%) rotate(${p * 120}deg) scale(${ringScale})`;
+                moonRing.style.opacity = ringOp;
+            }
+            if (heroContent) {
+                const drift = p * -60;
+                const fade = Math.max(1 - p * 2.5, 0);
+                heroContent.style.transform = `translateY(${drift}px)`;
+                heroContent.style.opacity = fade;
+            }
         }
 
-        /* Hero content parallax */
-        if (heroContent) {
-            const drift = p * -60;
-            const fade = Math.max(1 - p * 2.5, 0);
-            heroContent.style.transform = `translateY(${drift}px)`;
-            heroContent.style.opacity = fade;
+        // Bridge controller
+        if (bridgeController) {
+            const p = bridgeController.onScroll(st);
+            /* Maybe add bridge specific effects here later */
         }
 
         /* Scroll progress bar */
@@ -254,7 +377,7 @@
         /* ── SCROLL VELOCITY SKEW ── */
         const clampedV = Math.max(-3, Math.min(3, scrollVelocity * 0.015));
         document.body.style.setProperty('--skew', clampedV + 'deg');
-        $$('.section, .gallery, .manifesto, .cta, .marquee').forEach(el => {
+        $$('.section, .gallery, .manifesto, .cta, .marquee, .bridge-track').forEach(el => {
             el.style.transform = `skewY(${clampedV}deg)`;
         });
 
@@ -765,11 +888,34 @@
     }
 
     /* ============================================================
+       7. RAF RENDER LOOP (Optimized with visibility check)
+    ============================================================ */
+    function tick(timestamp) {
+        // Skip updates when page is not visible to save resources
+        if (!isPageVisible) {
+            rafId = requestAnimationFrame(tick);
+            return;
+        }
+
+        /* controllers - only update if visible */
+        if (introController && introController.isVisible !== false) introController.update();
+        // bridgeController is now standard playback
+
+        /* cursor */
+        updateCursor();
+        /* particles */
+        drawParticles();
+
+        rafId = requestAnimationFrame(tick);
+    }
+
+    /* ============================================================
        16. INIT
     ============================================================ */
     async function boot() {
-        resizeCanvas();
-        window.addEventListener('resize', resizeCanvas);
+        // Initialize performance observers first
+        initPerformanceObservers();
+
         window.addEventListener('scroll', handleScroll, { passive: true });
 
         initGrain();
@@ -778,28 +924,100 @@
         initLogoReact();
         initLenis();
 
-        /* Preload frames */
-        await preloadFrames();
+        // Awwwards approach: Use video elements instead of canvas frames
+        // Hero: Scrubbed via VideoController
+        introController = new VideoController('lunaVideo', 'scrollTrack');
 
-        if (frameCount > 0) {
-            drawFrame(0);
-            isReady = true;
-        }
+        // Bridge: Simple autoplay (no controller needed)
+        // bridgeController = new VideoController('lunaVideo2', 'bridgeTrack');
 
-        /* Hide loader */
-        if (loader) loader.classList.add('done');
+        // For video: just wait for metadata, no preload needed
+        const waitForVideos = new Promise((resolve) => {
+            let loaded = 0;
+            const checkReady = () => {
+                loaded++;
+                if (loaded >= 2) {
+                    resolve();
+                }
+            };
+
+            if (introController && introController.video) {
+                if (introController.isReady) checkReady();
+                else introController.video.addEventListener('loadedmetadata', checkReady);
+            } else {
+                checkReady();
+            }
+
+            // Bridge video is standard autoplay, but we still wait for it to be decent
+            const bv = document.getElementById('lunaVideo2');
+            if (bv) {
+                if (bv.readyState >= 1) checkReady();
+                else bv.addEventListener('loadedmetadata', checkReady);
+            } else {
+                checkReady();
+            }
+
+            // Fallback timeout
+            setTimeout(checkReady, 3000);
+        });
+
+        await waitForVideos;
+
+        isReady = true;
 
         /* Start RAF */
         tick();
 
-        /* GSAP setup (after frames are ready) */
-        requestAnimationFrame(() => {
+        /* Play entry animation curtain wipe, then init GSAP */
+        playEntryAnimation(() => {
             initGSAP();
             initTilt();
             initMagnetic();
             initModePreview();
             initMegaEnhancements();
         });
+    }
+
+    /* ============================================================
+       ENTRY ANIMATION - HPS Labs Standard Curtain Wipe
+    ============================================================ */
+    function playEntryAnimation(onReveal) {
+        if (typeof gsap === 'undefined') {
+            // Fallback: just hide the curtain immediately
+            if (entryCurtain) entryCurtain.style.display = 'none';
+            if (onReveal) onReveal();
+            return;
+        }
+
+        const tl = gsap.timeline();
+
+        // Title fade in
+        tl.to('.entry-title', {
+            opacity: 1,
+            duration: 0.8,
+            ease: 'power2.out'
+        })
+            // Title fade out
+            .to('.entry-title', {
+                opacity: 0,
+                duration: 0.5,
+                ease: 'power2.in',
+                delay: 0.3
+            })
+            // Curtain sweep up - CRITICAL: power4.inOut for cinematic feel
+            .to('#project-entry-curtain', {
+                y: '-100%',
+                duration: 0.7,
+                ease: 'power4.inOut',
+                onStart: () => {
+                    // Start page animations as curtain begins to lift
+                    if (onReveal) onReveal();
+                },
+                onComplete: () => {
+                    // Remove curtain from display after animation
+                    if (entryCurtain) entryCurtain.style.display = 'none';
+                }
+            });
     }
 
     if (document.readyState === 'loading') {

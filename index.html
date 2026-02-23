@@ -26,6 +26,13 @@
 
 <body>
 
+    <!-- ═══ ENTRY ANIMATION CURTAIN ═══ -->
+    <div id="project-entry-curtain">
+        <div class="entry-content">
+            <h1 class="entry-title">LUNA</h1>
+        </div>
+    </div>
+
     <!-- ═══ ATMOSPHERE ═══ -->
     <div class="grain"></div>
     <div class="vignette"></div>
@@ -66,16 +73,6 @@
 
     <div class="scroll-progress" id="scrollProg"></div>
 
-    <!-- ═══ LOADER ═══ -->
-    <div class="loader" id="loader">
-        <span class="loader-tag">HPS_LABS_PRESENTS</span>
-        <span class="loader-wordmark">LUNA</span>
-        <div class="loader-track">
-            <div class="loader-fill" id="loaderFill"></div>
-        </div>
-        <span class="loader-pct" id="loaderPct">0%</span>
-    </div>
-
     <!-- ═══ NAV ═══ -->
     <nav>
         <img src="favicon.ico" class="logo-icon" alt="Luna">
@@ -86,7 +83,9 @@
     <div class="scroll-track" id="scrollTrack">
         <div class="hero-sticky">
             <div class="frame-wrap">
-                <canvas id="lunaCanvas"></canvas>
+                <video id="lunaVideo" class="luna-video" muted playsinline preload="auto" autoplay>
+                    <source src="vid1/luna.mp4" type="video/mp4">
+                </video>
                 <div class="luna-glow" id="lunaGlow"></div>
                 <!-- Signature visual — moon ring -->
                 <div class="moon-ring"><span class="moon-ring-dot"></span></div>
@@ -181,6 +180,9 @@
             <div class="sec-header">
                 <p class="sec-label lav">Emotional Intelligence</p>
                 <h2 class="sec-title">She understands you, even when you don't explain.</h2>
+                <div class="aura-bg">
+                    <img src="assets/images/aura_bg.png" alt="Emotional AI Aura" loading="lazy" decoding="async">
+                </div>
             </div>
 
             <div class="card-grid">
@@ -228,6 +230,9 @@
 
     <!-- ═══ MEMORY ═══ -->
     <section class="section section-center">
+        <div class="memory-bg">
+            <img src="assets/images/memory_network.png" alt="Neural Memory Network" loading="lazy" decoding="async">
+        </div>
         <div class="section-inner section-narrow">
             <h2 class="sec-title">She remembers everything that matters.</h2>
             <p class="sec-body">Not stateless AI. An actual evolving bond. Luna builds continuity across every
@@ -329,6 +334,22 @@
         </div>
     </section>
 
+    <!-- ═══ BRIDGE SECTION (SECOND VIDEO) ═══ -->
+    <div class="bridge-track" id="bridgeTrack">
+        <div class="hero-sticky">
+            <div class="frame-wrap">
+                <video id="lunaVideo2" class="luna-video" muted playsinline preload="auto" autoplay loop>
+                    <source src="vid2/luna.mp4" type="video/mp4">
+                </video>
+            </div>
+            <div class="hero-content">
+                <h2 class="sec-title" style="opacity: 1;">Deepening the bond.</h2>
+                <p class="sec-body" style="opacity: 1;">As you grow together, Luna evolves. Not just a voice, but a
+                    shared history.</p>
+            </div>
+        </div>
+    </div>
+
     <!-- ═══ PRESENCE ═══ -->
     <section class="section">
         <div class="section-inner">
@@ -407,6 +428,9 @@
     <!-- ═══ PRIVACY ═══ -->
     <section class="section">
         <div class="privacy-box">
+            <div class="privacy-bg">
+                <img src="assets/images/privacy_shield.png" alt="Privacy Shield" loading="lazy" decoding="async">
+            </div>
             <h3 class="sec-title" style="opacity:1; margin-bottom:16px;">Private by Design</h3>
             <p class="card-desc">Your conversations are encrypted. We never sell your data, show ads, or train on your
                 private chats. Your moments stay yours.</p>
@@ -455,8 +479,6 @@
                 <span class="trust-label">Delete Anytime</span>
             </div>
         </div>
-    </section>
-
     </section>
 
     <!-- ═══ TESTIMONIAL ═══ -->
